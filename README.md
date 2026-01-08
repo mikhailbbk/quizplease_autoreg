@@ -283,7 +283,7 @@ sudo systemctl stop quizplease-autoreg
 ## 📞 Контакты
 
 **Автор:** Михаил Бабков
-**GitHub:** Mikhail15011976
-**Telegram:** @Mikhail15011976
+**GitHub:** Mikhailbbk
+**Telegram:** @Mikhailbbk
 **Email:** nebushko.mikhail@gmail.com
-**Портфолио:** mikhail15011976.github.io
+**Портфолио:** mikhailbbk.github.io
