@@ -134,28 +134,28 @@ quizplease-autoreg/
 ## 📊 Архитектура системы
 
 ### Схема работы:
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   QuizPlease    │    │   QuizPlease    │    │   PostgreSQL    │
-│     Website     │────│     Parser      │────│   (Optional)    │
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐  
+│   QuizPlease    │    │   QuizPlease    │    │   PostgreSQL    │  
+│     Website     │────│     Parser      │────│   (Optional)    │  
 └─────────────────┘    └─────────────────┘    └─────────────────┘
-                               │
-                               ▼
-                       ┌─────────────────┐
-                       │   Data Storage  │─────┐
-                       │    (JSON)       │     │
-                       └─────────────────┘     │
-                               │               │
-                               ▼               ▼
-                       ┌─────────────────┐ ┌─────────────────┐
-                       │   Change        │ │     Logging     │
-                       │   Detector      │ │     System      │
-                       └─────────────────┘ └─────────────────┘
-                               │
-                               ▼
-                       ┌─────────────────┐
-                       │   Telegram      │─────► Users
-                       │      Bot        │
-                       └─────────────────┘
+                               │  
+                               ▼  
+                       ┌─────────────────┐  
+                       │   Data Storage  │─────┐  
+                       │    (JSON)       │     │  
+                       └─────────────────┘     │  
+                               │               │  
+                               ▼               ▼  
+                       ┌─────────────────┐ ┌─────────────────┐  
+                       │   Change        │ │     Logging     │  
+                       │   Detector      │ │     System      │  
+                       └─────────────────┘ └─────────────────┘  
+                               │  
+                               ▼  
+                       ┌─────────────────┐  
+                       │   Telegram      │─────► Users  
+                       │      Bot        │  
+                       └─────────────────┘  
 
 ### Компоненты:
 1. **Парсер (src/extract_classic_games.py):** Основной модуль, извлекает данные с сайта
@@ -282,8 +282,8 @@ sudo systemctl stop quizplease-autoreg
 
 ## 📞 Контакты
 
-**Автор:** Михаил Бабков
-**GitHub:** Mikhailbbk
-**Telegram:** @Mikhailbbk
-**Email:** nebushko.mikhail@gmail.com
+**Автор:** Михаил Бабков  
+**GitHub:** Mikhailbbk  
+**Telegram:** @Mikhailbbk  
+**Email:** nebushko.mikhail@gmail.com  
 **Портфолио:** mikhailbbk.github.io
