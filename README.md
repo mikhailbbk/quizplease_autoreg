@@ -27,7 +27,7 @@
 
 ## Структура проекта
 ```text
-quizplease_autoreg/
+quizplease-autoreg/
 ├── .github/workflows/          # CI/CD пайплайны GitHub Actions
 │   ├── deploy.yml              # Автоматический деплой
 │   └── fix-git.yml             # Утилита для исправления Git
@@ -93,8 +93,8 @@ quizplease_autoreg/
 ### Установка
 ```bash
 # Клонируйте репозиторий
-git clone https://github.com/Mikhail15011976/quizplease_autoreg.git
-cd quizplease_autoreg
+git clone https://github.com/Mikhail15011976/quizplease-autoreg.git
+cd quizplease-autoreg
 
 # Установите зависимости
 pip install -r requirements.txt
@@ -134,10 +134,10 @@ PARSER_CONFIG = {
 python src/extract_classic_games.py
 
 # Запуск как systemd сервис (production)
-sudo nano /etc/systemd/system/quizplease_autoreg.service
+sudo nano /etc/systemd/system/quizplease-autoreg.service
 sudo systemctl daemon-reload
-sudo systemctl enable quizplease_autoreg
-sudo systemctl start quizplease_autoreg
+sudo systemctl enable quizplease-autoreg
+sudo systemctl start quizplease-autoreg
 ```
 
 ## Конфигурация systemd сервиса:
@@ -149,7 +149,7 @@ After=network.target
 [Service]
 Type=simple
 User=mikhail
-WorkingDirectory=/opt/quizplease_autoreg
+WorkingDirectory=/opt/quizplease-autoreg
 ExecStart=/opt/quizplease-autoreg/venv/bin/python src/extract_classic_games.py
 Restart=always
 RestartSec=10
@@ -162,16 +162,16 @@ WantedBy=multi-user.target
 
 ```bash
 # Проверить статус
-sudo systemctl status quizplease_autoreg
+sudo systemctl status quizplease-autoreg
 
 # Просмотреть логи
-sudo journalctl -u quizplease_autoreg -f
+sudo journalctl -u quizplease-autoreg -f
 
 # Перезапустить сервис
-sudo systemctl restart quizplease_autoreg
+sudo systemctl restart quizplease-autoreg
 
 # Остановить сервис
-sudo systemctl stop quizplease_autoreg
+sudo systemctl stop quizplease-autoreg
 ```
 
 ## Технические детали
@@ -190,7 +190,7 @@ sudo systemctl stop quizplease_autoreg
 
 ### Systemd журналы:
 ```bash
-journalctl -u quizplease_autoreg
+journalctl -u quizplease-autoreg
 ```
 
 ### Файловые логи:
@@ -200,7 +200,7 @@ tail -f logs/extract_games.log
 
 ### Статус сервиса:
 ```bash
-systemctl status quizplease_autoreg
+systemctl status quizplease-autoreg
 ```
 
 ### Данные:

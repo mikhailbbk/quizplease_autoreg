@@ -40,7 +40,7 @@ jobs:
           
           echo ''
           echo '1. Updating source code...'
-          cd /opt/quizplease_autoreg
+          cd /opt/quizplease-autoreg
           git fetch origin
           git checkout main
           git reset --hard origin/main
@@ -67,7 +67,7 @@ jobs:
           echo '✅ Code updated successfully!'
           echo ''
           echo 'To run manually:'
-          echo '  cd /opt/quizplease_autoreg'
+          echo '  cd /opt/quizplease-autoreg'
           echo '  source venv/bin/activate'
           echo '  python src/extract_classic_games.py'
           echo ''
