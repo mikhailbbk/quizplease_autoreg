@@ -90,7 +90,8 @@ def load_registration_data() -> RegistrationData:
 def process_new_games(new_games: List, monitor: QuizPleaseMonitor,
                       registration_data: RegistrationData) -> List[Dict]:
     """
-    Обрабатывает новые игры: добавляет в статистику и регистрируется
+    Обрабатывает новые игры: добавляет в статистику и регистрируется.
+    Уведомления отправляются ТОЛЬКО при успешной регистрации.
 
     Returns:
         List[Dict]: Результаты регистрации
@@ -101,7 +102,7 @@ def process_new_games(new_games: List, monitor: QuizPleaseMonitor,
 
     logger.info(f"🆕 Обнаружено {len(new_games)} новых игр")
 
-    # Добавляем игры в статистику
+    # Добавляем игры в статистику (без уведомлений)
     for game in new_games:
         game_type = 'classic'
         if '[новички]' in game.title or 'ИЗИ' in game.title or 'Easy' in game.title:
@@ -117,11 +118,6 @@ def process_new_games(new_games: List, monitor: QuizPleaseMonitor,
             registered=False
         )
 
-    # Отправляем отчет о новых играх в Telegram
-    if monitor.telegram and monitor.telegram.is_available:
-        report = stats_manager.get_new_games_report(new_games)
-        monitor.telegram.send_message(report)
-        logger.info("📨 Отчет о новых играх отправлен в Telegram")
 
     # Регистрируемся на новые игры
     reg_settings = config.REGISTRATION_SETTINGS
@@ -167,15 +163,18 @@ def process_new_games(new_games: List, monitor: QuizPleaseMonitor,
             game_ids = game_ids[:max_games]
 
         results = []
+        successful_registrations = []  # Список успешных регистраций
+
         for game_id in game_ids:
             logger.info(f"📝 Регистрация на игру {game_id}...")
             result = registrator.register_to_game(game_id, registration_data)
             results.append(result)
 
-            # Если регистрация успешна, обновляем статистику
+            # Если регистрация успешна - добавляем в список успешных
             if result.get('success'):
                 game = next((g for g in games_to_register if g.id == game_id), None)
                 if game:
+                    successful_registrations.append(game)
                     stats_manager.add_game(
                         game_id=game_id,
                         title=game.title,
@@ -195,13 +194,51 @@ def process_new_games(new_games: List, monitor: QuizPleaseMonitor,
             if len(game_ids) > 1:
                 time.sleep(delay)
 
+        if successful_registrations and monitor.telegram and monitor.telegram.is_available:
+            logger.info(f"📨 Отправка уведомлений о {len(successful_registrations)} успешных регистрациях")
+
+            # 1. Отправляем уведомление о каждой успешной регистрации
+            for game in successful_registrations:
+                message = (
+                    f"✅ *УСПЕШНАЯ РЕГИСТРАЦИЯ!*\n"
+                    f"🎯 *{game.title} {game.game_number}*\n"
+                    f"📅 *Дата:* {game.date}\n"
+                    f"🕒 *Время:* {game.time}\n"
+                    f"📍 *Место:* {game.place if game.place else 'Не указано'}\n"
+                    f"🏠 *Адрес:* {game.address if game.address else 'Не указан'}\n"
+                    f"💰 *Цена:* {game.price if game.price else 'Не указана'}\n"
+                    f"🕐 *Зарегистрировано:* {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+                if game.registration_url and game.registration_url != "#":
+                    message += f"\n\n🔗 Ссылка на игру: {game.registration_url}"
+
+                monitor.telegram.send_message(message)
+                time.sleep(0.5)
+
+            # 2. Отправляем статистику регистрации отдельным сообщением
+            stats_message = (
+                f"📊 *СТАТИСТИКА РЕГИСТРАЦИИ*\n"
+                f"🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                f"\n"
+                f"✅ *Зарегистрировано игр:* {len(successful_registrations)}\n"
+                f"📋 *Команда:* {registration_data.team_name}\n"
+                f"👥 *Количество игроков:* {registration_data.players_count}\n"
+                f"📧 *Email:* {registration_data.email}\n"
+                f"📱 *Телефон:* {registration_data.phone}\n"
+            )
+            monitor.telegram.send_message(stats_message)
+            logger.info(f"📨 Отправлены уведомления о {len(successful_registrations)} успешных регистрациях")
+
         return results
 
     return []
 
 
 def send_daily_statistics(monitor: QuizPleaseMonitor):
-    """Отправляет ежедневную статистику"""
+    """
+    Отправляет ежедневную статистику.
+    Теперь вызывается только если есть успешные регистрации.
+    """
     if not monitor.telegram or not monitor.telegram.is_available:
         logger.warning("Telegram бот недоступен")
         return
@@ -272,7 +309,7 @@ def main():
 
         # Запускаем мониторинг
         logger.info("📡 Запуск мониторинга...")
-        games = monitor.run(send_notifications=False)  # Отключаем стандартные уведомления
+        games = monitor.run(send_notifications=False)
 
         if not games:
             logger.warning("❌ Игры не найдены")
@@ -289,17 +326,19 @@ def main():
             logger.info(f"🆕 Обнаружено {len(new_games)} новых игр")
             results = process_new_games(new_games, monitor, registration_data)
 
-            # Отправляем отчет о регистрации
+            # Отправляем отчет о регистрации (только если были успешные регистрации)
             if results and monitor.telegram and monitor.telegram.is_available:
-                registrator = QuizPleaseRegistrator()
-                report = registrator.get_registration_report(results)
-                monitor.telegram.send_message(report)
-                logger.info("📨 Отчет о регистрации отправлен в Telegram")
+                # Проверяем, были ли успешные регистрации
+                successful = [r for r in results if r.get('success')]
+                if successful:
+                    registrator = QuizPleaseRegistrator()
+                    report = registrator.get_registration_report(results)
+                    monitor.telegram.send_message(report)
+                    logger.info("📨 Отчет о регистрации отправлен в Telegram")
+                else:
+                    logger.info("ℹ️ Успешных регистраций не было, отчет не отправлен")
         else:
             logger.info("🆕 Новых игр нет")
-
-        # Отправляем ежедневную статистику
-        send_daily_statistics(monitor)
 
         logger.info("=" * 60)
         logger.info("✅ Скрипт завершен успешно!")

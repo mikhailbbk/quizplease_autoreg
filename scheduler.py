@@ -62,6 +62,7 @@ class QuizPleaseScheduler:
         # Настройки
         self.interval_minutes = self.config.get('interval_minutes', 15)
         self.days = self.config.get('days', [0, 1, 2, 3, 4, 5, 6])  # Все дни по умолчанию
+        self.exclude_days = self.config.get('exclude_days', [])  # Исключенные дни
 
         self.day_names = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
@@ -93,6 +94,12 @@ class QuizPleaseScheduler:
 
         # Проверяем день недели
         current_day = datetime.now().weekday()
+
+        # Проверяем исключенные дни
+        if current_day in self.exclude_days:
+            day_name = self.day_names[current_day]
+            return False, f"Сегодня {day_name} - день исключен из регистрации"
+
         if current_day not in self.days:
             days_str = ', '.join([self.day_names[d] for d in self.days])
             return False, f"Сегодня не разрешенный день ({self.day_names[current_day]}). Разрешенные: {days_str}"
@@ -213,7 +220,12 @@ class QuizPleaseScheduler:
         logger.info(f"📁 Директория логов: {LOG_DIR}")
         logger.info(f"📁 Директория данных: {DATA_DIR}")
         days_str = ', '.join([self.day_names[d] for d in self.days])
-        logger.info(f"📅 Дни: {days_str}")
+        logger.info(f"📅 Разрешенные дни: {days_str}")
+
+        if self.exclude_days:
+            exclude_str = ', '.join([self.day_names[d] for d in self.exclude_days])
+            logger.info(f"🚫 Исключенные дни: {exclude_str}")
+
         logger.info(f"⏱️  Интервал: {self.interval_minutes} минут")
         logger.info(f"🕐 Старт: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info("=" * 60)
