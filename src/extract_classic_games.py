@@ -10,15 +10,22 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, asdict, field
 import hashlib
 
-# Определение корневой директории проекта
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-LOGS_DIR = os.path.join(BASE_DIR, 'logs')
-SRC_DIR = os.path.join(BASE_DIR, 'src')
-
 # Добавляем src в sys.path для импорта модулей
+SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src')
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
+
+# Импортируем config для получения путей и настроек
+try:
+    import config
+except ImportError:
+    print("❌ ОШИБКА: Не удалось импортировать config.py")
+    print("Убедитесь, что файл config.py существует в папке src/")
+    sys.exit(1)
+
+# Используем пути из config.py
+DATA_DIR = config.DATA_DIR
+LOGS_DIR = config.LOGS_DIR
 
 # Создание директорий, если они не существуют
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -39,9 +46,9 @@ logger = logging.getLogger(__name__)
 
 
 def load_configuration():
+    """Загружает конфигурацию из config.py"""
     try:
-        import config
-
+        # Проверяем наличие обязательных полей
         required_fields = ['TELEGRAM_CONFIG', 'PARSER_CONFIG']
         for field in required_fields:
             if not hasattr(config, field):
@@ -81,6 +88,7 @@ def load_configuration():
 
 
 def print_error_and_exit():
+    """Выводит сообщение об ошибке и завершает работу"""
     print("\n" + "=" * 60)
     print("❌ ОШИБКА КОНФИГУРАЦИИ!")
     print("=" * 60)
@@ -113,11 +121,13 @@ def print_error_and_exit():
     sys.exit(1)
 
 
+# Загружаем конфигурацию
 TELEGRAM_CONFIG, PARSER_CONFIG = load_configuration()
 
 
 @dataclass
 class Game:
+    """Класс для хранения данных об игре"""
     id: str
     title: str
     game_number: str
@@ -139,13 +149,19 @@ class Game:
             self.game_hash = self.calculate_hash()
 
     def calculate_hash(self) -> str:
+        """Вычисляет хеш игры для отслеживания изменений"""
         data_string = f"{self.title}{self.game_number}{self.date}{self.time}{self.place}{self.status}{self.availability_type}"
         return hashlib.md5(data_string.encode('utf-8')).hexdigest()
 
     def to_dict(self) -> Dict:
+        """Преобразует объект в словарь"""
         return asdict(self)
 
     def to_telegram_message(self) -> str:
+        """
+        Формирует сообщение для отправки в Telegram.
+        Ссылка отображается полным URL текстом, чтобы сохранялась при копировании.
+        """
         if self.availability_type == 'reserve':
             emoji = "⚠️"
             availability_text = "ЗАПИСЬ В РЕЗЕРВ"
@@ -171,12 +187,14 @@ class Game:
             f"🕐 *Обновлено:* {self.extracted_at}"
         )
 
+        # ✅ Ссылка отображается полным URL как текст, чтобы сохранялась при копировании
         if self.registration_url and self.registration_url != "#":
-            message += f"\n\n👉 [Ссылка для регистрации]({self.registration_url})"
+            message += f"\n\n👉 Ссылка для регистрации: {self.registration_url}"
 
         return message
 
     def _clean_price(self, price: str) -> str:
+        """Очищает строку с ценой от лишних символов"""
         if not price:
             return ""
         price = re.sub(r'\s+', ' ', price.strip())
@@ -187,12 +205,21 @@ class Game:
 
 
 class QuizPleaseApiParser:
+    """Парсер API QuizPlease"""
+
     def __init__(self, base_url: str = None):
         self.api_url = "https://api.quizplease.ru/api/games/schedule/32"
         self.session = requests.Session()
         self._setup_session()
 
+        # Ключевые слова для определения типа игры
+        self.game_type_keywords = {
+            'classic': ['Квиз, плиз!', 'Квиз, плиз! KLG'],
+            'easy': ['[новички]', 'ИЗИ', 'Easy', 'новичк'],
+        }
+
     def _setup_session(self) -> None:
+        """Настраивает HTTP сессию"""
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Accept': 'application/json, text/plain, */*',
@@ -202,12 +229,14 @@ class QuizPleaseApiParser:
         })
 
     def _determine_availability_type(self, status: int, few_places_left: bool) -> Tuple[str, bool]:
+        """Определяет тип доступности игры"""
         if status == 0 or status == 1:
             return 'active', True
         else:
             return 'reserve', False
 
     def _extract_game_number(self, game_number_raw, package_number) -> str:
+        """Извлекает номер игры"""
         if game_number_raw:
             return f"#{game_number_raw}"
         if package_number:
@@ -217,6 +246,7 @@ class QuizPleaseApiParser:
         return "Без номера"
 
     def _extract_time_from_datetime(self, datetime_str: str) -> str:
+        """Извлекает время из строки даты-времени"""
         if not datetime_str:
             return ""
         try:
@@ -227,7 +257,30 @@ class QuizPleaseApiParser:
         except Exception:
             return ""
 
-    def parse_games(self) -> List[Game]:
+    def _get_game_type(self, title: str) -> str:
+        """
+        Определяет тип игры по заголовку.
+        Возвращает: 'classic', 'easy' или 'other'
+        """
+        title_lower = title.lower()
+
+        for game_type, keywords in self.game_type_keywords.items():
+            for keyword in keywords:
+                if keyword.lower() in title_lower:
+                    return game_type
+
+        return 'other'
+
+    def parse_games(self, game_types: List[str] = None) -> List[Game]:
+        """
+        Парсит игры с фильтрацией по типу.
+
+        Args:
+            game_types: Список типов игр для фильтрации.
+                        Например: ['classic', 'easy'] - только классические и ИЗИ
+                                  ['classic'] - только классические
+                                  None или [] - все игры
+        """
         try:
             params = {
                 'per_page': 50,
@@ -254,6 +307,21 @@ class QuizPleaseApiParser:
 
             for game_info in games_data:
                 try:
+                    title = game_info.get('title', '')
+
+                    # Определяем тип игры
+                    game_type = self._get_game_type(title)
+
+                    # Фильтрация по типам игр
+                    if game_types and game_type not in game_types:
+                        logger.debug(f"Игра пропущена (тип {game_type} не в {game_types}): {title}")
+                        continue
+
+                    # Если тип 'other' и есть фильтрация - пропускаем
+                    if game_types and game_type == 'other':
+                        logger.debug(f"Игра пропущена (other): {title}")
+                        continue
+
                     status_code = game_info.get('status', 0)
                     few_places = game_info.get('few_places_left', False)
                     availability_type, is_available = self._determine_availability_type(status_code, few_places)
@@ -273,8 +341,6 @@ class QuizPleaseApiParser:
 
                     price = game_info.get('current_price', '')
                     price_str = f"{price} ₽" if price else 'Не указана'
-
-                    title = game_info.get('title', 'Квиз, плиз!')
 
                     if status_code == 0:
                         status_text = "✅ Места есть"
@@ -304,12 +370,13 @@ class QuizPleaseApiParser:
                     )
 
                     games.append(game)
+                    logger.debug(f"Добавлена игра: {title} (тип: {game_type})")
 
                 except Exception as e:
                     logger.error(f"Ошибка при обработке игры: {str(e)}")
                     continue
 
-            logger.info(f"Успешно обработано {len(games)} игр")
+            logger.info(f"Успешно обработано {len(games)} игр (фильтр: {game_types})")
             return games
 
         except requests.RequestException as e:
@@ -321,11 +388,14 @@ class QuizPleaseApiParser:
 
 
 class GameStorage:
+    """Класс для хранения и загрузки данных об играх"""
+
     def __init__(self, output_dir: str = None):
         self.output_dir = output_dir or DATA_DIR
         self.history_file = os.path.join(self.output_dir, 'games_history.json')
 
     def save_games(self, games: List[Game], filename: str = "classic_games.json") -> str:
+        """Сохраняет игры в JSON файл"""
         try:
             output_path = os.path.join(self.output_dir, filename)
             games_data = [game.to_dict() for game in games]
@@ -339,6 +409,7 @@ class GameStorage:
             return ""
 
     def _save_to_history(self, games: List[Game]) -> None:
+        """Сохраняет игры в историю"""
         try:
             history = []
             if os.path.exists(self.history_file):
@@ -361,6 +432,7 @@ class GameStorage:
             logger.debug(f"Не удалось сохранить историю: {str(e)}")
 
     def load_games(self, filename: str = "classic_games.json") -> List[Game]:
+        """Загружает игры из JSON файла"""
         try:
             filepath = os.path.join(self.output_dir, filename)
             if not os.path.exists(filepath):
@@ -386,6 +458,7 @@ class GameStorage:
             return []
 
     def find_new_games(self, current_games: List[Game], previous_games: List[Game]) -> List[Game]:
+        """Находит новые игры, которых не было в предыдущем списке"""
         if not previous_games:
             return current_games
         previous_ids = {game.id for game in previous_games}
@@ -397,6 +470,7 @@ class GameStorage:
         return new_games
 
     def find_changed_games(self, current_games: List[Game], previous_games: List[Game]) -> List[Game]:
+        """Находит игры с измененным статусом"""
         if not previous_games:
             return []
         previous_dict = {game.id: game for game in previous_games}
@@ -413,10 +487,13 @@ class GameStorage:
 
 
 class QuizPleaseMonitor:
-    def __init__(self, telegram_token: str = None, telegram_chat_ids = None):
+    """Класс для мониторинга игр QuizPlease"""
+
+    def __init__(self, telegram_token: str = None, telegram_chat_ids=None, game_types: List[str] = None):
         self.parser = QuizPleaseApiParser()
         self.storage = GameStorage()
         self.telegram = None
+        self.game_types = game_types or ['classic', 'easy']  # По умолчанию классические и ИЗИ
 
         if telegram_token and telegram_chat_ids:
             try:
@@ -433,13 +510,14 @@ class QuizPleaseMonitor:
                 self.telegram = None
 
     def run(self, send_notifications: bool = True) -> List[Game]:
+        """Запускает мониторинг"""
         try:
             logger.info("=" * 60)
-            logger.info("Запуск мониторинга игр 'Квиз, плиз! KLG'")
+            logger.info(f"Запуск мониторинга игр 'Квиз, плиз! KLG' (типы: {self.game_types})")
             logger.info("=" * 60)
 
             previous_games = self.storage.load_games()
-            current_games = self.parser.parse_games()
+            current_games = self.parser.parse_games(game_types=self.game_types)
 
             if not current_games:
                 logger.warning("Не удалось получить игры через API")
@@ -465,6 +543,7 @@ class QuizPleaseMonitor:
             return []
 
     def _send_change_notifications(self, new_games: List[Game], changed_games: List[Game]) -> None:
+        """Отправляет уведомления об изменениях"""
         try:
             if not self.telegram:
                 logger.warning("Telegram бот не инициализирован")
@@ -476,9 +555,9 @@ class QuizPleaseMonitor:
 
             if new_games:
                 if len(new_games) == 1:
-                    self.telegram.send_message(f"🎉 *НОВАЯ КЛАССИЧЕСКАЯ ИГРА!*")
+                    self.telegram.send_message(f"🎉 *НОВАЯ ИГРА!*")
                 else:
-                    self.telegram.send_message(f"🎉 *НОВЫЕ КЛАССИЧЕСКИЕ ИГРЫ!* ({len(new_games)})")
+                    self.telegram.send_message(f"🎉 *НОВЫЕ ИГРЫ!* ({len(new_games)})")
 
                 for game in new_games:
                     self.telegram.send_game_notification(game)
@@ -503,6 +582,7 @@ class QuizPleaseMonitor:
     def _print_statistics(self, current_games: List[Game],
                           new_games: List[Game],
                           changed_games: List[Game]) -> None:
+        """Выводит статистику мониторинга"""
         active_games = [g for g in current_games if g.availability_type == 'active']
         reserve_games = [g for g in current_games if g.availability_type == 'reserve']
 
@@ -533,10 +613,19 @@ class QuizPleaseMonitor:
 
 
 def main():
+    """Основная функция"""
     try:
+        # Типы игр для мониторинга
+        # ['classic'] - только классические
+        # ['easy'] - только ИЗИ
+        # ['classic', 'easy'] - и классические, и ИЗИ
+        # [] или None - все игры
+        GAME_TYPES = ['classic', 'easy']  # ← настройка здесь
+
         monitor = QuizPleaseMonitor(
             telegram_token=TELEGRAM_CONFIG['token'],
-            telegram_chat_ids=TELEGRAM_CONFIG['chat_ids']
+            telegram_chat_ids=TELEGRAM_CONFIG['chat_ids'],
+            game_types=GAME_TYPES
         )
 
         games = monitor.run(send_notifications=True)

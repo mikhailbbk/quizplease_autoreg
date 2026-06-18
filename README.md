@@ -212,5 +212,5 @@ systemctl status quizplease-autoreg
 **Автор:** Михаил Бабков  
 **GitHub:** Mikhailbbk  
 **Telegram:** @Mikhailbbk  
-**Email:** nebushko.mikhail@gmail.com  
+**Email:** mikhailbbk.dev@gmail.com  
 **Портфолио:** mikhailbbk.github.io

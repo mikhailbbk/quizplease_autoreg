@@ -1,72 +1,134 @@
 name: Fix Git on Server
 
 on:
-  workflow_dispatch:  # Только ручной запуск
+  workflow_dispatch:
 
 jobs:
   fix:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Fix Git Issues
       env:
         SSH_KEY: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
         HOST: ${{ secrets.SERVER_HOST }}
         USER: ${{ secrets.SERVER_USER }}
       run: |
-        echo "🔧 Fixing Git issues on server..."
+        echo "=========================================="
+        echo "🔧 FIXING GIT ISSUES ON SERVER"
+        echo "=========================================="
+        echo "🕐 $(date)"
+        echo ""
         
         mkdir -p ~/.ssh
         echo "$SSH_KEY" > ~/.ssh/fix_key
         chmod 600 ~/.ssh/fix_key
         
-        ssh -i ~/.ssh/fix_key $USER@$HOST "
-          echo '=== GIT REPAIR SCRIPT ==='
-          echo 'Working directory: /opt/quizplease-autoreg'
-          cd /opt/quizplease-autoreg
+        ssh -i ~/.ssh/fix_key -o StrictHostKeyChecking=no $USER@$HOST "
+          echo '=========================================='
+          echo '🔧 GIT REPAIR SCRIPT'
+          echo '=========================================='
+          echo ''
+          
+          # Проверяем наличие директории
+          if [ ! -d /opt/quizplease_autoreg ]; then
+            echo '❌ ОШИБКА: Директория /opt/quizplease_autoreg не найдена!'
+            echo '   Проверьте правильность пути'
+            exit 1
+          fi
+          
+          echo '📂 Working directory: /opt/quizplease_autoreg'
+          cd /opt/quizplease_autoreg || exit 1
           
           echo ''
-          echo '1. Backup current state...'
+          echo '📋 Текущий статус:'
+          git status --short || echo '⚠️ Не удалось получить статус'
+          echo ''
+          
+          echo '1️⃣ Backup current state...'
           BACKUP_DIR=\"/tmp/quizplease-backup-\$(date +%Y%m%d-%H%M%S)\"
-          cp -r . \"\$BACKUP_DIR\" 2>/dev/null || echo 'Backup skipped'
-          
+          mkdir -p \"\$BACKUP_DIR\"
+          cp -r . \"\$BACKUP_DIR\" 2>/dev/null || echo '⚠️ Backup skipped (no files)'
+          echo \"✅ Backup saved to: \$BACKUP_DIR\"
           echo ''
-          echo '2. Stash any changes...'
-          git stash
           
+          echo '2️⃣ Stash any changes...'
+          git stash || echo '⚠️ Nothing to stash'
           echo ''
-          echo '3. Remove problematic refs...'
-          rm -f .git/refs/remotes/origin/main
-          rm -f .git/refs/heads/main
           
+          echo '3️⃣ Remove problematic refs...'
+          rm -f .git/refs/remotes/origin/main 2>/dev/null || true
+          rm -f .git/refs/heads/main 2>/dev/null || true
+          echo '✅ Problematic refs removed'
           echo ''
-          echo '4. Clean and reset...'
-          git checkout -- .
-          git clean -fd
-          git gc --prune=now
           
+          echo '4️⃣ Clean and reset...'
+          git checkout -- . 2>/dev/null || true
+          git clean -fd 2>/dev/null || true
+          git gc --prune=now 2>/dev/null || true
+          echo '✅ Clean and reset completed'
           echo ''
-          echo '5. Fetch fresh...'
-          git fetch origin --force
           
+          echo '5️⃣ Fetch fresh...'
+          git fetch origin --force || {
+            echo '❌ Ошибка при fetch!'
+            echo '   Проверьте подключение к репозиторию'
+            exit 1
+          }
+          echo '✅ Fetch completed'
           echo ''
-          echo '6. Reset to origin/main...'
-          git checkout -B main origin/main --force
           
+          echo '6️⃣ Reset to origin/main...'
+          git checkout -B main origin/main --force || {
+            echo '❌ Ошибка при checkout!'
+            echo '   Проверьте, что ветка main существует в репозитории'
+            exit 1
+          }
+          echo '✅ Reset completed'
           echo ''
-          echo '7. Verify...'
-          echo 'Remote:'
+          
+          echo '7️⃣ Verify...'
+          echo ''
+          echo '📡 Remote:'
           git remote -v
           echo ''
-          echo 'Status:'
+          echo '📊 Status:'
           git status --short
           echo ''
-          echo 'Latest commit:'
+          echo '📝 Latest commit:'
           git log --oneline -1
-          
           echo ''
-          echo '✅ Git修复完成!'
-          echo 'Backup saved to: \$BACKUP_DIR'
+          
+          echo '8️⃣ Restore permissions...'
+          chmod -R 755 /opt/quizplease_autoreg 2>/dev/null || true
+          echo '✅ Permissions restored'
+          echo ''
+          
+          echo '=========================================='
+          echo '✅ GIT REPAIR COMPLETED SUCCESSFULLY!'
+          echo '=========================================='
+          echo '📁 Backup saved to: \$BACKUP_DIR'
+          echo '🕐 $(date)'
+          echo ''
+          echo '📝 Следующие шаги:'
+          echo '  1. Проверьте логи: tail -f logs/scheduler.log'
+          echo '  2. Перезапустите сервис: systemctl restart quizplease-scheduler'
+          echo '  3. Проверьте статус: systemctl status quizplease-scheduler'
         "
+        
+        # Проверяем результат
+        if [ $? -eq 0 ]; then
+          echo ""
+          echo "=========================================="
+          echo "✅ GIT FIX COMPLETED SUCCESSFULLY!"
+          echo "=========================================="
+        else
+          echo ""
+          echo "=========================================="
+          echo "❌ GIT FIX FAILED!"
+          echo "=========================================="
+          echo "Проверьте логи выше для деталей"
+          exit 1
+        fi

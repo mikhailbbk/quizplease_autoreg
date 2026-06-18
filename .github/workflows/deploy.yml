@@ -19,9 +19,218 @@ jobs:
         username: root
         key: ${{ secrets.SERVER_SSH_PRIVATE_KEY }}
         script: |
+          echo "=========================================="
+          echo "🚀 НАЧАЛО ДЕПЛОЯ"
+          echo "=========================================="
+          echo "🕐 $(date)"
+          echo ""
+          
           cd /opt/quizplease_autoreg
+          
+          echo "📂 Текущая директория: $(pwd)"
+          echo ""
+          
+          # ============================================
+          # 1. ОБНОВЛЕНИЕ КОДА
+          # ============================================
+          echo "📥 Обновление кода из репозитория..."
           git pull origin main
-          source venv/bin/activate
+          echo "✅ Код обновлен"
+          echo ""
+          
+          # ============================================
+          # 2. АКТИВАЦИЯ ВИРТУАЛЬНОГО ОКРУЖЕНИЯ
+          # ============================================
+          echo "🐍 Активация виртуального окружения..."
+          if [ -f venv/bin/activate ]; then
+            source venv/bin/activate
+            echo "✅ Виртуальное окружение активировано"
+          else
+            echo "⚠️ Виртуальное окружение не найдено, создаю..."
+            python3 -m venv venv
+            source venv/bin/activate
+            echo "✅ Виртуальное окружение создано"
+          fi
+          echo ""
+          
+          # ============================================
+          # 3. УСТАНОВКА ЗАВИСИМОСТЕЙ
+          # ============================================
+          echo "📦 Установка зависимостей..."
           pip install -r requirements.txt
-          systemctl restart quizplease
-          echo "✅ Deployment completed at $(date)"
+          echo "✅ Зависимости установлены"
+          echo ""
+          
+          # ============================================
+          # 4. СОЗДАНИЕ НЕОБХОДИМЫХ ДИРЕКТОРИЙ
+          # ============================================
+          echo "📁 Создание директорий..."
+          mkdir -p logs data
+          echo "✅ Директории созданы"
+          echo ""
+          
+          # ============================================
+          # 5. ПРОВЕРКА НАЛИЧИЯ ФАЙЛА CONFIG.PY
+          # ============================================
+          echo "🔍 Проверка наличия config.py..."
+          if [ ! -f src/config.py ]; then
+            echo "❌ ОШИБКА: src/config.py не найден!"
+            echo ""
+            echo "📝 Для решения проблемы:"
+            echo "  1. Скопируйте шаблон:"
+            echo "     cp src/config.example.py src/config.py"
+            echo "  2. Отредактируйте файл:"
+            echo "     nano src/config.py"
+            echo "  3. Заполните все необходимые настройки:"
+            echo "     - TELEGRAM_CONFIG (токен и chat_id)"
+            echo "     - REGISTRATION_DATA (данные команды)"
+            echo "     - И другие настройки"
+            echo ""
+            echo "❌ Деплой остановлен!"
+            exit 1
+          else
+            echo "✅ config.py найден"
+            # Проверяем наличие обязательных полей
+            if grep -q "TELEGRAM_CONFIG" src/config.py && grep -q "REGISTRATION_DATA" src/config.py; then
+              echo "✅ Обязательные настройки присутствуют"
+            else
+              echo "⚠️ В config.py отсутствуют обязательные настройки"
+            fi
+          fi
+          echo ""
+          
+          # ============================================
+          # 6. ПРОВЕРКА НАЛИЧИЯ ФАЙЛА COOKIES.JSON
+          # ============================================
+          echo "🍪 Проверка наличия cookies.json..."
+          if [ ! -f src/cookies.json ]; then
+            echo "⚠️ ВНИМАНИЕ: src/cookies.json не найден!"
+            echo ""
+            echo "📝 Для решения проблемы:"
+            echo "  1. Скопируйте шаблон:"
+            echo "     cp src/cookies.json.template src/cookies.json"
+            echo "  2. Откройте сайт https://klg.quizplease.ru в браузере"
+            echo "  3. Авторизуйтесь на сайте"
+            echo "  4. Скопируйте куки из браузера в файл src/cookies.json"
+            echo "  5. Обязательные куки: _ym_uid, city_id"
+            echo ""
+            echo "⚠️ Регистрация может не работать без этого файла!"
+            echo "   Продолжаю деплой, но регистрация может быть недоступна"
+          else
+            echo "✅ cookies.json найден"
+            # Проверяем наличие обязательных кук
+            if grep -q "_ym_uid" src/cookies.json && grep -q "city_id" src/cookies.json; then
+              echo "✅ Обязательные куки присутствуют"
+            else
+              echo "⚠️ В cookies.json отсутствуют обязательные куки (_ym_uid или city_id)"
+            fi
+          fi
+          echo ""
+          
+          # ============================================
+          # 7. СОЗДАНИЕ ФАЙЛОВ СТАТИСТИКИ
+          # ============================================
+          echo "📊 Создание файлов статистики..."
+          if [ ! -f data/game_stats.json ]; then
+            echo '{}' > data/game_stats.json
+            echo "✅ Создан data/game_stats.json"
+          else
+            echo "✅ data/game_stats.json уже существует"
+          fi
+          
+          if [ ! -f data/registered_games.json ]; then
+            echo '{"games": [], "updated_at": ""}' > data/registered_games.json
+            echo "✅ Создан data/registered_games.json"
+          else
+            echo "✅ data/registered_games.json уже существует"
+          fi
+          echo ""
+          
+          # ============================================
+          # 8. ОСТАНОВКА СТАРЫХ ПРОЦЕССОВ (через systemd)
+          # ============================================
+          echo "⏹️ Остановка старого сервиса..."
+          if systemctl is-active --quiet quizplease-scheduler; then
+            systemctl stop quizplease-scheduler
+            echo "✅ Сервис остановлен"
+          else
+            echo "ℹ️ Сервис не был запущен"
+          fi
+          echo ""
+          
+          # ============================================
+          # 9. ПРОВЕРКА НАЛИЧИЯ SYSTEMD СЕРВИСА
+          # ============================================
+          echo "🔍 Проверка наличия systemd сервиса..."
+          if [ ! -f /etc/systemd/system/quizplease-scheduler.service ]; then
+            echo "⚠️ ВНИМАНИЕ: systemd сервис не найден!"
+            echo ""
+            echo "📝 Для создания сервиса выполните:"
+            echo "  sudo nano /etc/systemd/system/quizplease-scheduler.service"
+            echo ""
+            echo "📋 Содержимое сервиса:"
+            echo "----------------------------------------"
+            cat << 'EOF'
+          [Unit]
+          Description=QuizPlease Scheduler - Automatic Registration
+          After=network.target
+          
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory=/opt/quizplease_autoreg
+          Environment="PATH=/opt/quizplease_autoreg/venv/bin:/usr/local/bin:/usr/bin:/bin"
+          ExecStart=/opt/quizplease_autoreg/venv/bin/python /opt/quizplease_autoreg/scheduler.py
+          Restart=always
+          RestartSec=10
+          StandardOutput=append:/opt/quizplease_autoreg/logs/scheduler.out
+          StandardError=append:/opt/quizplease_autoreg/logs/scheduler.err
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+            echo "----------------------------------------"
+            echo ""
+            echo "Затем выполните:"
+            echo "  sudo systemctl daemon-reload"
+            echo "  sudo systemctl enable quizplease-scheduler"
+            echo "  sudo systemctl start quizplease-scheduler"
+            echo ""
+            echo "⚠️ Деплой продолжается, но сервис не запущен"
+          else
+            echo "✅ Systemd сервис найден"
+            echo ""
+            
+            # ============================================
+            # 10. ЗАПУСК СЕРВИСА
+            # ============================================
+            echo "🚀 Запуск сервиса..."
+            systemctl daemon-reload
+            systemctl enable quizplease-scheduler
+            systemctl start quizplease-scheduler
+            echo "✅ Сервис запущен"
+            echo ""
+            
+            # ============================================
+            # 11. ПРОВЕРКА СТАТУСА СЕРВИСА
+            # ============================================
+            echo "📊 Статус сервиса:"
+            systemctl status quizplease-scheduler --no-pager || true
+            echo ""
+          fi
+          
+          # ============================================
+          # 12. ЗАВЕРШЕНИЕ
+          # ============================================
+          echo "=========================================="
+          echo "✅ ДЕПЛОЙ УСПЕШНО ЗАВЕРШЕН!"
+          echo "=========================================="
+          echo "🕐 $(date)"
+          echo ""
+          echo "📝 Полезные команды:"
+          echo "  - Просмотр логов сервиса: sudo journalctl -u quizplease-scheduler -f"
+          echo "  - Просмотр логов планировщика: tail -f logs/scheduler.log"
+          echo "  - Просмотр логов регистрации: tail -f logs/registration.log"
+          echo "  - Статус сервиса: systemctl status quizplease-scheduler"
+          echo "  - Перезапуск сервиса: systemctl restart quizplease-scheduler"
+          echo ""
